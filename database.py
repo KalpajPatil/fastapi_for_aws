@@ -33,7 +33,8 @@ def get_engine():
         host=DB_HOST,
         port=DB_PORT,
         database=DB_NAME,
-        query={"sslmode": "require"},
+        # connect_timeout makes network problems fail with an error instead of hanging.
+        query={"sslmode": "require", "connect_timeout": "10"},
     )
     engine = create_engine(url, pool_pre_ping=True, pool_recycle=3600)
 
