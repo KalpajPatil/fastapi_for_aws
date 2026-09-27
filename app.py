@@ -78,3 +78,13 @@ def save_users(db: Session = Depends(get_db)):
 @app.get("/api/db/users", response_model=list[UserSchema])
 def list_saved_users(db: Session = Depends(get_db)):
     return db.scalars(select(User).order_by(User.id)).all()
+
+    return response.json()
+
+
+@app.get("/api/db/users/{user_id}", response_model=UserSchema)
+def get_saved_user(user_id: int, db: Session = Depends(get_db)):
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+    return user
