@@ -1,0 +1,21 @@
+[Unit]
+Description=FastAPI app (fastapi_for_aws)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/home/ec2-user/fastapi_for_aws
+
+Environment=DB_SECRET_NAME=dev-db-credentials
+Environment=AWS_REGION=eu-north-1
+Environment=PYTHONUNBUFFERED=1
+
+ExecStart=/home/ec2-user/fastapi_for_aws/venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
