@@ -3,20 +3,23 @@ import os
 from functools import lru_cache
 
 import boto3
-from sqlalchemy import URL, create_engine
+from sqlalchemy import URL, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 # Only the secret's *name* lives in the environment; the credentials themselves
-# stay in AWS Secrets Manager.
-DB_SECRET_NAME = os.getenv("DB_SECRET_NAME", "dev-db-credentials")
+# stay in AWS Secrets Manager. Host and database name aren't secret, and the
+# RDS-managed secret only contains username + password anyway.
+DB_SECRET_NAME = os.getenv("DB_SECRET_NAME", "rds!db-7c97f9e2-fac5-4f0b-9bf6-324cdfaf6fec")
 AWS_REGION = os.getenv("AWS_REGION", "eu-north-1")
+DB_HOST = os.getenv("DB_HOST", "dev-db.c7qmime6ialv.eu-north-1.rds.amazonaws.com")
+DB_PORT = int(os.getenv("DB_PORT", "5432"))
+DB_NAME = os.getenv("DB_NAME", "postgres")
 
 
 class Base(DeclarativeBase):
     pass
 
 
-@lru_cache
 def get_db_secret() -> dict:
     client = boto3.client("secretsmanager", region_name=AWS_REGION)
     response = client.get_secret_value(SecretId=DB_SECRET_NAME)
@@ -25,18 +28,24 @@ def get_db_secret() -> dict:
 
 @lru_cache
 def get_engine():
-    secret = get_db_secret()
-    # URL.create escapes special characters in the password, which RDS-generated
-    # passwords often contain.
     url = URL.create(
         drivername="postgresql+psycopg2",
-        username=secret["username"],
-        password=secret["password"],
-        host=secret.get("host") or os.environ["DB_HOST"],
-        port=int(secret.get("port") or os.getenv("DB_PORT", 5432)),
-        database=secret.get("dbname", "dev-db"),
+        host=DB_HOST,
+        port=DB_PORT,
+        database=DB_NAME,
+        query={"sslmode": "require"},
     )
-    return create_engine(url, pool_pre_ping=True)
+    engine = create_engine(url, pool_pre_ping=True, pool_recycle=3600)
+
+    # RDS rotates the password in its managed secret, so fetch fresh credentials
+    # every time the pool opens a new connection instead of caching them forever.
+    @event.listens_for(engine, "do_connect")
+    def provide_credentials(dialect, conn_rec, cargs, cparams):
+        secret = get_db_secret()
+        cparams["user"] = secret["username"]
+        cparams["password"] = secret["password"]
+
+    return engine
 
 
 @lru_cache
