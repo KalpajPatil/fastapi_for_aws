@@ -36,6 +36,11 @@ async def test():
     return "Hello World!"
 
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 @app.get("/api/users", response_model=list[UserSchema])
 async def get_users():
     async with httpx.AsyncClient(timeout=10) as client:
