@@ -1,26 +1,11 @@
-from contextlib import asynccontextmanager
-
 import httpx
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-
-from database import Base, get_db, get_engine
-from models import User
-from schemas import UserSchema
 
 USERS_URL = "https://jsonplaceholder.typicode.com/users"
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Creates the users table if it doesn't exist yet.
-    Base.metadata.create_all(bind=get_engine())
-    yield
-
-
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 
 origins = ["*"]
 app.add_middleware(
@@ -41,7 +26,7 @@ async def health():
     return {"status": "ok"}
 
 
-@app.get("/api/users", response_model=list[UserSchema])
+@app.get("/api/users")
 async def get_users():
     async with httpx.AsyncClient(timeout=10) as client:
         try:
@@ -50,46 +35,3 @@ async def get_users():
         except httpx.HTTPError as exc:
             raise HTTPException(status_code=502, detail=f"Upstream request failed: {exc}")
     return response.json()
-
-
-# Plain `def` (not async) so FastAPI runs the blocking HTTP + DB calls in a threadpool.
-@app.post("/api/users/save", response_model=list[UserSchema])
-def save_users(db: Session = Depends(get_db)):
-    try:
-        response = httpx.get(USERS_URL, timeout=10)
-        response.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail=f"Upstream request failed: {exc}")
-
-    users = [UserSchema.model_validate(u) for u in response.json()]
-    for user in users:
-        # merge() inserts new rows and updates existing ones, so re-running is safe.
-        db.merge(
-            User(
-                id=user.id,
-                name=user.name,
-                username=user.username,
-                email=user.email,
-                phone=user.phone,
-                website=user.website,
-                address=user.address.model_dump(),
-                company=user.company.model_dump(by_alias=True),
-            )
-        )
-    db.commit()
-    return users
-
-
-@app.get("/api/db/users", response_model=list[UserSchema])
-def list_saved_users(db: Session = Depends(get_db)):
-    return db.scalars(select(User).order_by(User.id)).all()
-
-    return response.json()
-
-
-@app.get("/api/db/users/{user_id}", response_model=UserSchema)
-def get_saved_user(user_id: int, db: Session = Depends(get_db)):
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail=f"User {user_id} not found")
-    return user

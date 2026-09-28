@@ -8,11 +8,6 @@ User=ec2-user
 Group=ec2-user
 WorkingDirectory=/home/ec2-user/fastapi_for_aws
 
-Environment="DB_SECRET_NAME=rds!db-7c97f9e2-fac5-4f0b-9bf6-324cdfaf6fec"
-Environment=AWS_REGION=eu-north-1
-Environment=DB_HOST=dev-db.c7qmime6ialv.eu-north-1.rds.amazonaws.com
-Environment=DB_PORT=5432
-Environment=DB_NAME=postgres
 Environment=PYTHONUNBUFFERED=1
 
 ExecStart=/home/ec2-user/fastapi_for_aws/venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000
